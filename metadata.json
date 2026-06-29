@@ -1,0 +1,6 @@
+{
+  "name": "Sistem Rekap Produk Kosong",
+  "description": "Aplikasi untuk mengelola dan merekap data produk kosong serta request produk antar outlet secara real-time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
