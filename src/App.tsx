@@ -47,7 +47,7 @@ const LATEST_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzihvW3D5bTHW
 const HISTORY_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQcOP2SJiiNjZS7ARP5HPL3Eb1_Ogwjb3L5w0oMHgVgcLdK_uUcejUWFfGUpQcpabJnQSaIr93_p_We/pub?gid=0&single=true&output=csv';
 const MASTER_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTCxz1GPm7QU9IS1yBiSjvIdNTLUsvvplOCyT_R3XH4O-LuVbHoY_bXn1LTH5lpnlolJ29BhUgEdnFm/pub?gid=1564332470&single=true&output=csv';
 
-const ADMIN_NAMES = ['Bobby', 'Winda', 'Putri', 'Mayank'];
+const ADMIN_NAMES = ['Bobby', 'Putri', 'Mayank', 'Winda'];
 const DESTINATION_OPTIONS = ['SDK', 'TRK', 'PDS', 'TBN', 'TYA', 'MMG'];
 const ITEMS_PER_PAGE = 30;
 const HISTORY_ITEMS_PER_PAGE = 10;
@@ -63,9 +63,9 @@ export default function App() {
       }
     }
     return {
-      username: 'toko',
+      username: 'online',
       role: 'store',
-      name: 'Admin Toko'
+      name: 'Admin Online'
     };
   });
 
@@ -185,9 +185,9 @@ export default function App() {
 
   const handleLogout = () => {
     const defaultUser = {
-      username: 'toko',
+      username: 'online',
       role: 'store' as const,
-      name: 'Admin Toko'
+      name: 'Admin Online'
     };
     setLoggedInUser(defaultUser);
     localStorage.setItem('loggedInUser', JSON.stringify(defaultUser));
@@ -922,35 +922,44 @@ export default function App() {
           {/* TOP HEADER - ROLE & NOTIF */}
           <div className="flex justify-between items-center py-2 border-b border-slate-100 gap-2">
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-slate-500 px-1">Akses Pengguna:</span>
-              <select
-                value={loggedInUser.username}
-                onChange={(e) => {
-                  const users: Record<string, { role: 'store' | 'purchasing'; name: string }> = {
-                    toko: { role: 'store', name: 'Admin Toko' },
-                    gudang: { role: 'store', name: 'Admin Gudang' },
-                    online: { role: 'store', name: 'Admin Online' },
-                    sales: { role: 'store', name: 'Admin Sales' },
-                    cs: { role: 'purchasing', name: 'Purchasing (CS)' }
-                  };
-                  const userKey = e.target.value;
-                  const u = users[userKey];
-                  if (u) {
-                    handleLoginSuccess({
-                      username: userKey,
-                      role: u.role,
-                      name: u.name
-                    });
-                  }
-                }}
-                className="text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-100 rounded-lg px-2.5 py-1 outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer transition-all"
-              >
-                <option value="toko">Admin Toko</option>
-                <option value="gudang">Admin Gudang</option>
-                <option value="online">Admin Online</option>
-                <option value="sales">Admin Sales</option>
-                <option value="cs">Purchasing (CS)</option>
-              </select>
+              {!(userRole === 'store' && activeTab === 'request') ? (
+                <>
+                  <span className="text-xs font-bold text-slate-500 px-1">Akses Pengguna:</span>
+                  <select
+                    value={loggedInUser.username}
+                    onChange={(e) => {
+                      const users: Record<string, { role: 'store' | 'purchasing'; name: string }> = {
+                        toko: { role: 'store', name: 'Admin Toko' },
+                        gudang: { role: 'store', name: 'Admin Gudang' },
+                        online: { role: 'store', name: 'Admin Online' },
+                        sales: { role: 'store', name: 'Admin Sales' },
+                        cs: { role: 'purchasing', name: 'Purchasing (CS)' }
+                      };
+                      const userKey = e.target.value;
+                      const u = users[userKey];
+                      if (u) {
+                        handleLoginSuccess({
+                          username: userKey,
+                          role: u.role,
+                          name: u.name
+                        });
+                      }
+                    }}
+                    className="text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-100 rounded-lg px-2.5 py-1 outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer transition-all"
+                  >
+                    <option value="online">Admin Online</option>
+                    <option value="toko">Admin Toko</option>
+                    <option value="gudang">Admin Gudang</option>
+                    <option value="sales">Admin Sales</option>
+                    <option value="cs">Purchasing (CS)</option>
+                  </select>
+                </>
+              ) : (
+                <div className="flex items-center space-x-1 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1 select-none">
+                  <span>👤</span>
+                  <span>{loggedInUser.name}</span>
+                </div>
+              )}
             </div>
              
             <div className="flex items-center space-x-2 relative">
@@ -1243,6 +1252,41 @@ export default function App() {
                     
                     <div className="flex flex-col xl:flex-row items-start lg:items-center gap-3 w-full lg:w-auto">
                       <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full xl:w-auto bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 shadow-sm">
+                        <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Akses:</span>
+                        <div className="relative">
+                          <select
+                            value={loggedInUser.username}
+                            onChange={(e) => {
+                              const users: Record<string, { role: 'store' | 'purchasing'; name: string }> = {
+                                toko: { role: 'store', name: 'Admin Toko' },
+                                gudang: { role: 'store', name: 'Admin Gudang' },
+                                online: { role: 'store', name: 'Admin Online' },
+                                sales: { role: 'store', name: 'Admin Sales' },
+                                cs: { role: 'purchasing', name: 'Purchasing (CS)' }
+                              };
+                              const userKey = e.target.value;
+                              const u = users[userKey];
+                              if (u) {
+                                handleLoginSuccess({
+                                  username: userKey,
+                                  role: u.role,
+                                  name: u.name
+                                });
+                              }
+                            }}
+                            className="appearance-none bg-white border border-slate-200 text-xs font-bold text-indigo-700 px-3 py-1.5 pr-8 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/10 cursor-pointer"
+                          >
+                            <option value="online">Admin Online</option>
+                            <option value="toko">Admin Toko</option>
+                            <option value="gudang">Admin Gudang</option>
+                            <option value="sales">Admin Sales</option>
+                            <option value="cs">Purchasing (CS)</option>
+                          </select>
+                          <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                        </div>
+
+                        <span className="text-slate-300">|</span>
+
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lokasi:</span>
                         
                         {currentLocationOptions.length > 0 ? (
