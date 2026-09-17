@@ -1,6 +1,6 @@
 {
-  "name": "Sistem Rekap Produk Kosong",
-  "description": "Aplikasi untuk mengelola dan merekap data produk kosong serta request produk antar outlet secara real-time.",
+  "name": "Sistem Rekap Produk Kosong & Dashboard Divisi",
+  "description": "Aplikasi manajemen formulir Request Outlet dan Riwayat Request Outlet antar cabang dan gudang secara terintegrasi.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

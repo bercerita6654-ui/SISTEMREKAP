@@ -23,6 +23,31 @@ export interface RequestItem extends Product {
   _qty?: number;
 }
 
+export interface StockAlertInfo {
+  sku: string;
+  productName: string;
+  unit?: string;
+  photoUrl?: string;
+  stockLocation?: string;
+  alertType: 'empty' | 'low' | 'damaged' | 'reorder';
+  customNote?: string;
+  status: 'pending' | 'acknowledged' | 'reordered' | 'resolved';
+}
+
+export interface LiveChatMessage {
+  id: string;
+  channel: 'empty-product' | 'general';
+  senderUsername: string;
+  senderName: string;
+  senderRole: string;
+  senderLocation?: string;
+  targetUser?: string;
+  text: string;
+  stockAlert?: StockAlertInfo;
+  timestamp: string;
+  readBy?: string[];
+}
+
 export interface ChatMessage {
   sender: string;
   role: string; // 'store' | 'purchasing'

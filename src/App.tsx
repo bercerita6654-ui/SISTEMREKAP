@@ -26,7 +26,17 @@ import {
   User,
   Bell,
   LogOut,
-  Send
+  Send,
+  MessageSquare,
+  PackageX,
+  Warehouse,
+  LayoutDashboard,
+  Activity,
+  FileSpreadsheet,
+  Menu,
+  Clock,
+  ArrowRight,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -42,12 +52,15 @@ import {
 
 import SetupModal from './components/SetupModal';
 import NotifDetailModal from './components/NotifDetailModal';
+import LiveChatDrawer from './components/LiveChatDrawer';
+import DivisionDashboard from './components/DivisionDashboard';
+import ChatRecordingCenter from './components/ChatRecordingCenter';
 
 const LATEST_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzihvW3D5bTHW0mvcTh_cyYBl-0lTuuIqsx1fmQTiZx5bw2vuI29CzsFm0dG3fgbnTw/exec';
 const HISTORY_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQcOP2SJiiNjZS7ARP5HPL3Eb1_Ogwjb3L5w0oMHgVgcLdK_uUcejUWFfGUpQcpabJnQSaIr93_p_We/pub?gid=0&single=true&output=csv';
 const MASTER_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTCxz1GPm7QU9IS1yBiSjvIdNTLUsvvplOCyT_R3XH4O-LuVbHoY_bXn1LTH5lpnlolJ29BhUgEdnFm/pub?gid=1564332470&single=true&output=csv';
 
-const ADMIN_NAMES = ['Bobby', 'Putri', 'Mayank', 'Winda'];
+const ADMIN_NAMES = ['Bobby', 'Putri', 'Mishell', 'Winda'];
 const DESTINATION_OPTIONS = ['SDK', 'TRK', 'PDS', 'TBN', 'TYA', 'MMG'];
 const ITEMS_PER_PAGE = 30;
 const HISTORY_ITEMS_PER_PAGE = 10;
@@ -81,6 +94,8 @@ export default function App() {
   const [requestItems, setRequestItems] = useState<RequestItem[]>([]);
   const [copiedRequestOnly, setCopiedRequestOnly] = useState(false);
   const [copiedRequestSave, setCopiedRequestSave] = useState(false);
+  const [copiedHistoryId, setCopiedHistoryId] = useState<string | null>(null);
+  const [showHistorySidebar, setShowHistorySidebar] = useState(false);
 
   const [requesterLocation, setRequesterLocation] = useState('Gudang');
   const [isCustomLocation, setIsCustomLocation] = useState(false);
@@ -106,15 +121,16 @@ export default function App() {
     return localStorage.getItem('gasHistoryCsvUrl') || HISTORY_CSV_URL;
   });
 
-  const [activeTab, setActiveTab] = useState<'database' | 'request' | 'history'>('database');
+  const [activeTab, setActiveTab] = useState<'request' | 'history'>('request');
   const [showInbox, setShowInbox] = useState(false);
+  const [isRecordingCenterOpen, setIsRecordingCenterOpen] = useState(false);
 
   const [readNotifs, setReadNotifs] = useState<string[]>(() => {
     const saved = localStorage.getItem('readNotifs');
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [historyFilterType, setHistoryFilterType] = useState<'rekap' | 'request'>('rekap');
+  const [historyFilterType, setHistoryFilterType] = useState<'request'>('request');
   const [historyFilterMonth, setHistoryFilterMonth] = useState('all');
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [copiedAllId, setCopiedAllId] = useState<string | null>(null);
@@ -131,20 +147,52 @@ export default function App() {
 
   const [historyCurrentPage, setHistoryCurrentPage] = useState(1);
 
+  // Live Chat state
+  const [isLiveChatOpen, setIsLiveChatOpen] = useState(false);
+  const [preSelectedProductForAlert, setPreSelectedProductForAlert] = useState<Product | null>(null);
+  const [liveChatUnreadCount, setLiveChatUnreadCount] = useState(0);
+
   const userRole = loggedInUser?.role || 'store';
+
+  // Calculate live chat unread messages for current user
+  useEffect(() => {
+    const checkUnread = () => {
+      try {
+        const saved = localStorage.getItem('app_live_chat_messages_v2');
+        if (saved) {
+          const msgs = JSON.parse(saved);
+          if (Array.isArray(msgs)) {
+            const unread = msgs.filter(m => !m.readBy || !m.readBy.includes(loggedInUser.username)).length;
+            setLiveChatUnreadCount(unread);
+          }
+        }
+      } catch {}
+    };
+
+    checkUnread();
+    const interval = setInterval(checkUnread, 3000);
+    window.addEventListener('storage', checkUnread);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', checkUnread);
+    };
+  }, [loggedInUser.username, isLiveChatOpen]);
 
   // Computed Options based on current logged in user
   const currentAdminOptions = useMemo(() => {
-    if (!loggedInUser) return [];
+    if (!loggedInUser) return ADMIN_NAMES;
+    if (loggedInUser.username === 'admin') return ADMIN_NAMES;
     if (loggedInUser.username === 'gudang') return ADMIN_NAMES;
+    if (loggedInUser.username === 'online') return ADMIN_NAMES;
     if (loggedInUser.username === 'toko') return []; // force custom input
     return ADMIN_NAMES;
   }, [loggedInUser]);
 
   const currentLocationOptions = useMemo(() => {
-    if (!loggedInUser) return ['Gudang', 'Toko Pusat'];
+    if (!loggedInUser) return ['Gudang', 'Toko Pusat', 'Online Gudang', 'Online Toko'];
+    if (loggedInUser.username === 'admin') return ['Gudang', 'Toko Pusat', 'Online Gudang', 'Online Toko'];
     if (loggedInUser.username === 'gudang') return ['Gudang'];
-    if (loggedInUser.username === 'toko') return ['Toko Pusat'];
+    if (loggedInUser.username === 'toko') return ['Toko Pusat', 'Toko'];
     if (loggedInUser.username === 'online') return ['Online Gudang', 'Online Toko'];
     return ['Gudang', 'Toko Pusat'];
   }, [loggedInUser]);
@@ -155,11 +203,35 @@ export default function App() {
     localStorage.setItem('loggedInUser', JSON.stringify(session));
   };
 
+  const handleSwitchUser = (userKey: string) => {
+    const users: Record<string, { role: 'store' | 'purchasing'; name: string }> = {
+      admin: { role: 'store', name: 'Admin' },
+      gudang: { role: 'store', name: 'Bagian Gudang' },
+      toko: { role: 'store', name: 'Admin Toko' },
+      online: { role: 'store', name: 'Admin Online' },
+      sales: { role: 'store', name: 'Admin Sales' },
+      cs: { role: 'purchasing', name: 'Purchasing (CS)' }
+    };
+    const u = users[userKey];
+    if (u) {
+      handleLoginSuccess({
+        username: userKey,
+        role: u.role,
+        name: u.name
+      });
+    }
+  };
+
   // Synchronize settings when loggedInUser changes
   useEffect(() => {
     if (loggedInUser) {
       if (loggedInUser.role === 'store') {
-        if (loggedInUser.username === 'gudang') {
+        if (loggedInUser.username === 'admin') {
+          setRequesterName('Bobby');
+          setIsCustomName(false);
+          setRequesterLocation('Gudang');
+          setIsCustomLocation(false);
+        } else if (loggedInUser.username === 'gudang') {
           setRequesterName('Bobby');
           setIsCustomName(false);
           setRequesterLocation('Gudang');
@@ -182,6 +254,38 @@ export default function App() {
       }
     }
   }, [loggedInUser]);
+
+  // Direct helpers for Live Chat interaction
+  const handleAddToRekapFromChat = (product: Product, note?: string) => {
+    setRekap(prev => {
+      const exists = prev.find(item => item.id === product.id);
+      if (exists) {
+        return prev.map(item => item.id === product.id ? { ...item, _catatan: note || item._catatan } : item);
+      }
+      return [...prev, { ...product, _catatan: note || '' }];
+    });
+  };
+
+  const handleAddToRequestFromChat = (product: Product, qty: number = 1) => {
+    setRequestItems(prev => {
+      const exists = prev.find(item => item.id === product.id);
+      if (exists) {
+        return prev.map(item => item.id === product.id ? { ...item, _qty: (item._qty || 1) + qty } : item);
+      }
+      return [...prev, { ...product, _qty: qty }];
+    });
+  };
+
+  const handleSearchInDatabase = (term: string) => {
+    setSearchTerm(term);
+    setActiveTab('database');
+  };
+
+  const handleOpenAlertForProduct = (prod: Product, e?: MouseEvent) => {
+    if (e) e.stopPropagation();
+    setPreSelectedProductForAlert(prod);
+    setIsLiveChatOpen(true);
+  };
 
   const handleLogout = () => {
     const defaultUser = {
@@ -450,23 +554,13 @@ export default function App() {
   };
 
   const handleAdd = (item: Product) => {
-    if (activeTab === 'database') {
-      if (!rekap.some(r => r.id === item.id)) {
-        setRekap([...rekap, { ...item, _catatan: '' }]);
-      }
-    } else if (activeTab === 'request') {
-      if (!requestItems.some(r => r.id === item.id)) {
-        setRequestItems([...requestItems, { ...item, _qty: 1 }]);
-      }
+    if (!requestItems.some(r => r.id === item.id)) {
+      setRequestItems([...requestItems, { ...item, _qty: 1 }]);
     }
   };
 
   const handleRemove = (id: number) => {
-    if (activeTab === 'database') {
-      setRekap(rekap.filter(r => r.id !== id));
-    } else if (activeTab === 'request') {
-      setRequestItems(requestItems.filter(r => r.id !== id));
-    }
+    setRequestItems(requestItems.filter(r => r.id !== id));
   };
 
   const handleNoteChange = (id: number, noteValue: string) => {
@@ -577,6 +671,39 @@ export default function App() {
     } else {
       executeCopy(text, setCopiedRequestOnly, 'request', requestItems, false);
     }
+  };
+
+  const handleCopyHistorySessionMessage = (session: HistorySession) => {
+    let textToCopy = session.text;
+    if (!textToCopy) {
+      let dest = 'Outlet';
+      let req = session.requester || 'Admin';
+      if (session.requester) {
+        if (session.requester.includes(' ⬅ Outlet: ')) {
+          const parts = session.requester.split(' ⬅ Outlet: ');
+          req = parts[0];
+          dest = parts[1] || 'Outlet';
+        } else if (session.requester.includes(' ➔ Tujuan: ')) {
+          const parts = session.requester.split(' ➔ Tujuan: ');
+          req = parts[0];
+          dest = parts[1] || 'Outlet';
+        }
+      }
+      textToCopy = generateRequestCopyText(session.items, dest, req, ['SKU', 'Nama Produk', 'Unit']);
+    }
+
+    const textArea = document.createElement("textarea");
+    textArea.value = textToCopy;
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try { document.execCommand('copy'); } catch {}
+    document.body.removeChild(textArea);
+
+    setCopiedHistoryId(session.id);
+    setTimeout(() => {
+      setCopiedHistoryId(null);
+    }, 2000);
   };
 
   const handleSaveToSheet = async () => {
@@ -700,19 +827,20 @@ export default function App() {
 
   const displayHeaders = useMemo(() => {
     if (headers.length === 0) return [];
-    const targets = ['sku', 'nama produk', 'unit', 'stock gudang', 'stock toko'];
-    const result: string[] = [];
     
-    targets.forEach(target => {
-      let match = headers.find(h => h.toLowerCase().trim() === target);
-      if (!match) {
-        match = headers.find(h => h.toLowerCase().includes(target));
-      }
-      if (match && !result.includes(match)) {
-        result.push(match);
-      }
-    });
-    
+    // Identify 15th column (stock column from spreadsheet, 0-indexed 14)
+    const stockCol = headers[14] || headers.find(h => h.toLowerCase().trim() === 'qty' || h.toLowerCase().includes('stok') || h.toLowerCase().includes('stock'));
+
+    const preferredOrder = [
+      headers.find(h => h.toLowerCase() === 'code' || h.toLowerCase().includes('sku') || h.toLowerCase().includes('kode')),
+      headers.find(h => h.toLowerCase() === 'barcode'),
+      headers.find(h => h.toLowerCase().includes('desc') || h.toLowerCase().includes('nama')),
+      headers.find(h => h.toLowerCase().includes('unit') || h.toLowerCase().includes('satuan')),
+      headers.find(h => h.toLowerCase() === 'merk'),
+      stockCol
+    ].filter((h): h is string => Boolean(h));
+
+    const result = Array.from(new Set(preferredOrder));
     return result.length > 0 ? result : headers;
   }, [headers]);
 
@@ -720,15 +848,9 @@ export default function App() {
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentData = filteredData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  // History Filter
+  // History Filter (Request Outlet)
   const filteredHistory = useMemo(() => {
-    let result = savedHistory;
-
-    if (historyFilterType === 'rekap') {
-      result = result.filter(h => h.type === 'save' || h.type === 'copy');
-    } else if (historyFilterType === 'request') {
-      result = result.filter(h => h.type === 'request');
-    }
+    let result = savedHistory.filter(h => h.type === 'request');
 
     if (historyFilterMonth !== 'all') {
       result = result.filter(h => {
@@ -927,35 +1049,19 @@ export default function App() {
                   <span className="text-xs font-bold text-slate-500 px-1">Akses Pengguna:</span>
                   <select
                     value={loggedInUser.username}
-                    onChange={(e) => {
-                      const users: Record<string, { role: 'store' | 'purchasing'; name: string }> = {
-                        toko: { role: 'store', name: 'Admin Toko' },
-                        gudang: { role: 'store', name: 'Admin Gudang' },
-                        online: { role: 'store', name: 'Admin Online' },
-                        sales: { role: 'store', name: 'Admin Sales' },
-                        cs: { role: 'purchasing', name: 'Purchasing (CS)' }
-                      };
-                      const userKey = e.target.value;
-                      const u = users[userKey];
-                      if (u) {
-                        handleLoginSuccess({
-                          username: userKey,
-                          role: u.role,
-                          name: u.name
-                        });
-                      }
-                    }}
+                    onChange={(e) => handleSwitchUser(e.target.value)}
                     className="text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-100 rounded-lg px-2.5 py-1 outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer transition-all"
                   >
-                    <option value="online">Admin Online</option>
-                    <option value="toko">Admin Toko</option>
-                    <option value="gudang">Admin Gudang</option>
-                    <option value="sales">Admin Sales</option>
-                    <option value="cs">Purchasing (CS)</option>
+                    <option value="admin">👑 Admin (Gudang / Toko)</option>
+                    <option value="gudang">📦 Bagian Gudang</option>
+                    <option value="toko">🏪 Admin Toko</option>
+                    <option value="online">🌐 Admin Online</option>
+                    <option value="sales">💼 Admin Sales</option>
+                    <option value="cs">🛒 Purchasing (CS)</option>
                   </select>
                 </>
               ) : (
-                <div className="flex items-center space-x-1 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1 select-none">
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1 select-none">
                   <span>👤</span>
                   <span>{loggedInUser.name}</span>
                 </div>
@@ -963,6 +1069,33 @@ export default function App() {
             </div>
              
             <div className="flex items-center space-x-2 relative">
+              {/* REAL-TIME RECORDING AUDIT LOG BUTTON */}
+              <button
+                onClick={() => setIsRecordingCenterOpen(true)}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all"
+                title="Buka Log Rekaman Chat & Alert Real-Time"
+              >
+                <span className="h-2 w-2 rounded-full bg-red-500 animate-ping"></span>
+                <span className="hidden sm:inline">Log Rekaman</span>
+                <span className="sm:hidden">Log</span>
+              </button>
+
+              {/* LIVE CHAT & STOCK ALERTS BUTTON */}
+              <button
+                onClick={() => setIsLiveChatOpen(true)}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all relative"
+                title="Buka Chat & Info Stok Antar User"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Chat &amp; Info Stok</span>
+                <span className="sm:hidden">Chat</span>
+                {liveChatUnreadCount > 0 && (
+                  <span className="bg-amber-400 text-amber-950 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full border border-white animate-pulse">
+                    {liveChatUnreadCount}
+                  </span>
+                )}
+              </button>
+
               {/* NOTIFICATION INBOX */}
               <div className="relative">
                 <button 
@@ -1050,56 +1183,66 @@ export default function App() {
                 <Store className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-900 to-slate-700 tracking-tight leading-tight">
-                  Sistem Rekap
+                <h1 className="text-lg sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-900 to-indigo-800 tracking-tight leading-tight">
+                  Request Outlet
                 </h1>
-                <p className="text-[10px] sm:text-[11px] font-semibold text-slate-500">{userRole === 'purchasing' ? 'Panel Purchasing' : 'Produk Kosong & Inventaris'}</p>
+                <p className="text-[10px] sm:text-[11px] font-semibold text-slate-500">Formulir &amp; Riwayat Request Outlet</p>
               </div>
             </div>
-            <div className="flex space-x-2">
+            
+            <div className="flex items-center space-x-2">
+              <div className="bg-slate-100/90 p-1 rounded-xl inline-flex items-center space-x-1 border border-slate-200/60 shadow-inner">
+                {/* TAB 1: REQUEST OUTLET */}
+                <button
+                  onClick={() => setActiveTab('request')}
+                  className={"flex items-center space-x-2 px-3.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap " + 
+                    (activeTab === 'request' 
+                      ? 'bg-purple-600 text-white shadow-sm' 
+                      : 'text-slate-600 hover:text-purple-700 hover:bg-slate-200/50'
+                    )}
+                >
+                  <Store className="h-4 w-4" /> 
+                  <span>Request Outlet</span>
+                  {requestItems.length > 0 && (
+                    <span className={"ml-1 px-1.5 py-0.5 text-[10px] font-extrabold rounded-full " + 
+                      (activeTab === 'request' ? 'bg-purple-800 text-purple-100' : 'bg-purple-100 text-purple-700')
+                    }>
+                      {requestItems.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* TAB 2: RIWAYAT REQUEST OUTLET */}
+                <button
+                  onClick={() => {
+                    setActiveTab('history');
+                  }}
+                  className={"flex items-center space-x-2 px-3.5 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap " + 
+                    (activeTab === 'history' 
+                      ? 'bg-purple-600 text-white shadow-sm' 
+                      : 'text-slate-600 hover:text-purple-700 hover:bg-slate-200/50'
+                    )}
+                >
+                  <History className="h-4 w-4" /> 
+                  <span>Riwayat Request Outlet</span>
+                  {savedHistory.filter(h => h.type === 'request').length > 0 && (
+                    <span className={"ml-1 px-1.5 py-0.5 text-[10px] font-extrabold rounded-full " + 
+                      (activeTab === 'history' ? 'bg-purple-800 text-purple-100' : 'bg-slate-200 text-slate-700')
+                    }>
+                      {savedHistory.filter(h => h.type === 'request').length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
               <button 
                 onClick={fetchData}
                 disabled={loading}
-                className="flex items-center space-x-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 rounded-xl transition-all duration-200 shadow-sm hover:shadow active:scale-95 disabled:opacity-50 text-xs sm:text-sm font-semibold"
+                className="flex items-center space-x-1.5 px-3 py-2 sm:px-4 sm:py-2 bg-white border border-slate-200 text-slate-700 hover:text-purple-600 hover:border-purple-300 hover:bg-purple-50 rounded-xl transition-all duration-200 shadow-xs hover:shadow active:scale-95 disabled:opacity-50 text-xs sm:text-sm font-semibold"
+                title="Refresh Data Master"
               >
-                <RefreshCw className={"h-4 w-4 " + (loading ? 'animate-spin text-blue-500' : '')} />
+                <RefreshCw className={"h-4 w-4 " + (loading ? 'animate-spin text-purple-500' : '')} />
                 <span className="hidden sm:inline">Refresh</span>
-              </button>
-            </div>
-          </div>
-          
-          <div className="flex justify-center md:justify-start -mb-4 pb-4 mt-2">
-            <div className="bg-slate-100/80 p-1.5 rounded-2xl inline-flex space-x-1 shadow-inner border border-slate-200/50 overflow-x-auto max-w-full">
-              {userRole === 'store' && (
-                <>
-                  <button
-                    onClick={() => setActiveTab('database')}
-                    className={"flex items-center space-x-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap " + (activeTab === 'database' ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50')}
-                  >
-                    <Database className="h-4 w-4" /> 
-                    <span>Database &amp; Rekap</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('request')}
-                    className={"flex items-center space-x-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap " + (activeTab === 'request' ? 'bg-white text-purple-700 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50')}
-                  >
-                    <Store className="h-4 w-4" /> 
-                    <span>Request Outlet</span>
-                  </button>
-                </>
-              )}
-
-              <button
-                onClick={() => setActiveTab('history')}
-                className={"flex items-center space-x-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 whitespace-nowrap " + (activeTab === 'history' ? 'bg-white text-indigo-700 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50')}
-              >
-                <History className="h-4 w-4" /> 
-                <span>{userRole === 'purchasing' ? 'Monitor Laporan Outlet' : 'Riwayat'}</span>
-                {savedHistory.length > 0 && (
-                  <span className={"ml-1 px-2 py-0.5 text-[10px] rounded-full " + (activeTab === 'history' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600')}>
-                    {savedHistory.length}
-                  </span>
-                )}
               </button>
             </div>
           </div>
@@ -1108,151 +1251,61 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         <AnimatePresence mode="wait">
-          {userRole === 'store' && (activeTab === 'database' || activeTab === 'request') && (
+          {activeTab === 'request' && (
             <motion.div 
-              key={activeTab}
+              key="request"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
               transition={{ duration: 0.3 }}
               className="space-y-8"
             >
-              
-              {/* --- DAN KERANJANG REKAP PRODUK KOSONG --- */}
-              {activeTab === 'database' && (
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 overflow-hidden ring-1 ring-slate-900/5">
-                  <div className="bg-gradient-to-r from-indigo-50/50 to-white px-4 sm:px-6 py-4 sm:py-5 border-b border-indigo-100/50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                    <div className="flex items-center space-x-3">
-                      <div className="bg-indigo-100 p-2 rounded-lg text-indigo-600">
-                        <ShoppingCart className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h2 className="text-base sm:text-lg font-bold text-slate-800">Daftar Rekap Produk Kosong</h2>
-                        <p className="text-xs font-semibold text-slate-500">{rekap.length} Produk dipilih</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                      <button
-                        onClick={handleSaveToSheet}
-                        disabled={rekap.length === 0 || isSaving}
-                        className={"flex-1 lg:flex-none justify-center flex items-center space-x-2 px-4 py-2.5 rounded-xl transition-all duration-200 active:scale-95 text-xs sm:text-sm font-bold shadow-sm " + (saveSuccess ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-200' : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-indigo-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none disabled:border-slate-200 border border-transparent')}
-                      >
-                        {isSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : saveSuccess ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-                        <span>{isSaving ? 'Mengirim...' : saveSuccess ? 'Terkirim!' : 'Kirim Laporan'}</span>
-                      </button>
-                      <button
-                        onClick={() => downloadCSV(rekap, displayHeaders, 'Rekap_Produk_Kosong')}
-                        disabled={rekap.length === 0}
-                        className="flex-1 lg:flex-none justify-center flex items-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-amber-600 hover:border-amber-300 hover:bg-amber-50 rounded-xl transition-all duration-200 shadow-sm hover:shadow active:scale-95 disabled:opacity-50 text-xs sm:text-sm font-bold"
-                        title="Download CSV"
-                      >
-                        <Download className="h-4 w-4" />
-                        <span className="hidden sm:inline">Download CSV</span>
-                      </button>
-                      <button
-                        onClick={handleCopy}
-                        disabled={rekap.length === 0}
-                        className={"flex-1 lg:flex-none justify-center flex items-center space-x-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl transition-all duration-200 shadow-sm active:scale-95 text-xs sm:text-sm font-bold " + (copied ? 'text-emerald-600 border-emerald-300 bg-emerald-50 hover:shadow-emerald-100' : 'text-slate-700 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 disabled:opacity-50')}
-                      >
-                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                        <span>{copied ? 'Tersalin!' : 'Salin Teks'}</span>
-                      </button>
-                    </div>
-                  </div>
+              {/* --- TOP GRID: FORM REQUEST (KIRI) & RIWAYAT TERSALIN/TERSIMPAN (KANAN) --- */}
+              <div className={showHistorySidebar ? "grid grid-cols-1 lg:grid-cols-12 gap-6 items-start" : "w-full space-y-4"}>
                 
-                  <div className="p-4 bg-slate-50/50">
-                    {rekap.length === 0 ? (
-                      <div className="px-6 py-12 text-center flex flex-col items-center justify-center">
-                        <div className="bg-white p-4 rounded-full shadow-sm mb-4 border border-slate-100">
-                          <ListChecks className="h-8 w-8 text-slate-300" />
+                {/* KOLOM KIRI: DAFTAR REQUEST OUTLET (KERANJANG AKTIF) */}
+                <div className={showHistorySidebar ? "lg:col-span-7 flex flex-col space-y-4" : "w-full flex flex-col space-y-4"}>
+                  <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 overflow-hidden ring-1 ring-slate-900/5">
+                  <div className="bg-gradient-to-r from-purple-50/60 to-white p-4 sm:p-5 border-b border-purple-100/60 flex flex-col gap-3.5">
+                    {/* Top Row: Title + Toggle Riwayat + Salin & Simpan Button */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-purple-100 p-2.5 rounded-xl text-purple-600 shadow-xs shrink-0">
+                          <Store className="h-5 w-5" />
                         </div>
-                        <p className="text-slate-500 font-semibold text-sm max-w-sm">
-                          Keranjang rekap masih kosong. Silakan cari dan tambahkan produk dari database di bawah.
-                        </p>
+                        <div>
+                          <h2 className="text-base sm:text-lg font-bold text-slate-800">Daftar Request Outlet</h2>
+                          <p className="text-xs font-semibold text-slate-500">{requestItems.length} Produk dimasukkan</p>
+                        </div>
                       </div>
-                    ) : (
-                      <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto p-1">
-                        {rekap.map((item, idx) => {
-                          const nameCol = headers.find(h => h.toLowerCase().includes('nama')) || headers[1] || headers[0];
-                          const skuCol = headers.find(h => h.toLowerCase().includes('sku') || h.toLowerCase().includes('kode'));
-                          const fotoCol = headers.find(h => h.toLowerCase().includes('foto'));
-                          const driveId = fotoCol && item[fotoCol] ? String(item[fotoCol]).trim() : '';
-                          
-                          return (
-                            <li key={item.id} className="group flex flex-col justify-between bg-white border border-slate-200/60 p-3.5 rounded-xl hover:shadow-md hover:border-indigo-300 transition-all duration-200 gap-2">
-                              <div className="flex justify-between items-center">
-                                <div className="flex items-center space-x-3 overflow-hidden">
-                                  {driveId ? (
-                                    <div className="flex-shrink-0 h-9 w-9 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 relative">
-                                      <img
-                                        src={`https://lh3.googleusercontent.com/d/${driveId}`}
-                                        alt={item[nameCol] || 'Foto'}
-                                        className="h-full w-full object-cover"
-                                        loading="lazy"
-                                        referrerPolicy="no-referrer"
-                                        onError={(e) => {
-                                          (e.currentTarget as HTMLImageElement).src = 'https://placehold.co/100x100/f1f5f9/94a3b8?text=N/A';
-                                        }}
-                                      />
-                                      <div className="absolute top-0 left-0 bg-black/60 text-white text-[8px] px-1 font-bold rounded-br">
-                                        {idx + 1}
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="flex-shrink-0 h-8 w-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-xs group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
-                                      {idx + 1}
-                                    </div>
-                                  )}
-                                  <div className="truncate">
-                                    <p className="text-sm font-bold text-slate-700 truncate">{item[nameCol]}</p>
-                                    {skuCol && item[skuCol] && (
-                                      <p className="text-xs font-mono text-slate-400 truncate">{item[skuCol]}</p>
-                                    )}
-                                  </div>
-                                </div>
-                                <button 
-                                  onClick={() => handleRemove(item.id)}
-                                  className="flex-shrink-0 ml-2 text-slate-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-colors"
-                                  title="Hapus"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-                              <div className="pl-11">
-                                <input
-                                  type="text"
-                                  placeholder="Tambahkan catatan... (opsional)"
-                                  value={item._catatan || ''}
-                                  onChange={(e) => handleNoteChange(item.id, e.target.value)}
-                                  className="w-full text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none transition-colors placeholder-slate-400 bg-slate-50 focus:bg-white"
-                                />
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              )}
 
-              {/* --- DAN KERANJANG REQUEST OUTLET --- */}
-              {activeTab === 'request' && (
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 overflow-hidden ring-1 ring-slate-900/5">
-                  <div className="bg-gradient-to-r from-purple-50/50 to-white px-4 sm:px-6 py-4 sm:py-5 border-b border-purple-100/50 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                    <div className="flex items-center space-x-3 w-full lg:w-auto">
-                      <div className="bg-purple-100 p-2 rounded-lg text-purple-600">
-                        <Store className="h-5 w-5" />
-                      </div>
-                      <div className="flex-1">
-                        <h2 className="text-base sm:text-lg font-bold text-slate-800">Daftar Request Outlet</h2>
-                        <p className="text-xs font-semibold text-slate-500">{requestItems.length} Produk dimasukkan</p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setShowHistorySidebar(!showHistorySidebar)}
+                          className="shrink-0 whitespace-nowrap flex items-center space-x-1.5 px-3.5 py-2.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/80 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer shadow-2xs"
+                          title={showHistorySidebar ? 'Sembunyikan panel riwayat di samping' : 'Buka panel riwayat di samping'}
+                        >
+                          <History className="h-4 w-4 shrink-0 text-purple-600" />
+                          <span>{showHistorySidebar ? 'Sembunyikan Riwayat' : 'Buka Riwayat'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleCopyRequest(true)}
+                          disabled={requestItems.length === 0 || ((isCustomName || currentAdminOptions.length === 0) && !customName.trim()) || ((isCustomLocation || currentLocationOptions.length === 0) && !customLocation.trim())}
+                          className="shrink-0 whitespace-nowrap flex items-center justify-center space-x-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white rounded-xl shadow-md hover:shadow-lg active:scale-95 text-xs sm:text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          {copiedRequestSave ? <Check className="h-4 w-4 shrink-0" /> : <Save className="h-4 w-4 shrink-0" />}
+                          <span className="whitespace-nowrap">{copiedRequestSave ? 'Tersimpan & Tersalin!' : 'Salin & Simpan'}</span>
+                        </button>
                       </div>
                     </div>
-                    
-                    <div className="flex flex-col xl:flex-row items-start lg:items-center gap-3 w-full lg:w-auto">
-                      <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full xl:w-auto bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 shadow-sm">
-                        <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">Akses:</span>
+
+                    {/* Bottom Row: Clean 4-Column Controls Bar */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-50/90 p-2.5 rounded-xl border border-slate-200/80 shadow-2xs text-xs">
+                      {/* Akses */}
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Akses:</span>
                         <div className="relative">
                           <select
                             value={loggedInUser.username}
@@ -1274,7 +1327,7 @@ export default function App() {
                                 });
                               }
                             }}
-                            className="appearance-none bg-white border border-slate-200 text-xs font-bold text-indigo-700 px-3 py-1.5 pr-8 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/10 cursor-pointer"
+                            className="w-full appearance-none bg-white border border-slate-200 text-xs font-bold text-indigo-700 py-1.5 pl-2.5 pr-6 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer truncate"
                           >
                             <option value="online">Admin Online</option>
                             <option value="toko">Admin Toko</option>
@@ -1282,13 +1335,13 @@ export default function App() {
                             <option value="sales">Admin Sales</option>
                             <option value="cs">Purchasing (CS)</option>
                           </select>
-                          <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                          <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
                         </div>
+                      </div>
 
-                        <span className="text-slate-300">|</span>
-
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lokasi:</span>
-                        
+                      {/* Lokasi / Pengirim */}
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pengirim:</span>
                         {currentLocationOptions.length > 0 ? (
                           <div className="relative">
                             <select
@@ -1301,28 +1354,28 @@ export default function App() {
                                   setRequesterLocation(e.target.value);
                                 }
                               }}
-                              className="appearance-none bg-white border border-slate-200 text-xs font-bold text-slate-700 px-3 py-1.5 pr-8 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/10 cursor-pointer"
+                              className="w-full appearance-none bg-white border border-slate-200 text-xs font-bold text-slate-700 py-1.5 pl-2.5 pr-6 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer truncate"
                             >
                               {currentLocationOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                               <option value="Custom">Lainnya...</option>
                             </select>
-                            <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                            <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
                           </div>
                         ) : null}
-
                         {(isCustomLocation || currentLocationOptions.length === 0) && (
                           <input 
                             type="text" 
                             value={customLocation} 
                             onChange={(e) => setCustomLocation(e.target.value)} 
                             placeholder="Ketik Lokasi..."
-                            className="w-28 text-xs font-bold px-2 py-1.5 bg-white border border-purple-300 rounded-lg outline-none text-purple-700"
+                            className="w-full text-xs font-bold px-2 py-1 bg-white border border-purple-300 rounded-lg outline-none text-purple-700 mt-1"
                           />
                         )}
-                        
-                        <span className="text-slate-300">|</span>
-                        
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Admin:</span>
+                      </div>
+
+                      {/* Admin */}
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Admin:</span>
                         {currentAdminOptions.length > 0 ? (
                           <div className="relative">
                             <select
@@ -1335,57 +1388,38 @@ export default function App() {
                                   setRequesterName(e.target.value);
                                 }
                               }}
-                              className="appearance-none bg-white border border-slate-200 text-xs font-bold text-slate-700 px-3 py-1.5 pr-8 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/10 cursor-pointer"
+                              className="w-full appearance-none bg-white border border-slate-200 text-xs font-bold text-slate-700 py-1.5 pl-2.5 pr-6 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer truncate"
                             >
                               {currentAdminOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                               <option value="Custom">Lainnya...</option>
                             </select>
-                            <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                            <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
                           </div>
                         ) : null}
-
                         {(isCustomName || currentAdminOptions.length === 0) && (
                           <input 
                             type="text" 
                             value={customName} 
                             onChange={(e) => setCustomName(e.target.value)} 
                             placeholder="Ketik Nama..."
-                            className="w-28 text-xs font-bold px-2 py-1.5 bg-white border border-purple-300 rounded-lg outline-none text-purple-700"
+                            className="w-full text-xs font-bold px-2 py-1 bg-white border border-purple-300 rounded-lg outline-none text-purple-700 mt-1"
                           />
                         )}
+                      </div>
 
-                        <span className="text-slate-300">|</span>
-
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tujuan:</span>
+                      {/* Tujuan */}
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tujuan:</span>
                         <div className="relative">
                           <select
                             value={destinationOutlet}
                             onChange={(e) => setDestinationOutlet(e.target.value)}
-                            className="appearance-none bg-white border border-slate-200 text-xs font-bold text-slate-700 px-3 py-1.5 pr-8 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/10 cursor-pointer"
+                            className="w-full appearance-none bg-white border border-slate-200 text-xs font-bold text-slate-700 py-1.5 pl-2.5 pr-6 rounded-lg outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer truncate"
                           >
                             {DESTINATION_OPTIONS.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
                           </select>
-                          <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                          <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
                         </div>
-                      </div>
-                      
-                      <div className="flex w-full xl:w-auto gap-2">
-                        <button
-                          onClick={() => handleCopyRequest(false)}
-                          disabled={requestItems.length === 0 || ((isCustomName || currentAdminOptions.length === 0) && !customName.trim()) || ((isCustomLocation || currentLocationOptions.length === 0) && !customLocation.trim())}
-                          className="w-full sm:w-auto justify-center flex items-center space-x-2 px-4 py-2.5 bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 rounded-xl transition-all duration-200 shadow-sm active:scale-95 text-xs sm:text-sm font-bold disabled:opacity-50"
-                        >
-                          {copiedRequestOnly ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                          <span>{copiedRequestOnly ? 'Tersalin!' : 'Salin Saja'}</span>
-                        </button>
-                        <button
-                          onClick={() => handleCopyRequest(true)}
-                          disabled={requestItems.length === 0 || ((isCustomName || currentAdminOptions.length === 0) && !customName.trim()) || ((isCustomLocation || currentLocationOptions.length === 0) && !customLocation.trim())}
-                          className="w-full sm:w-auto justify-center flex items-center space-x-2 px-4 py-2.5 bg-purple-600 text-white hover:bg-purple-700 rounded-xl transition-all duration-200 shadow-md active:scale-95 text-xs sm:text-sm font-bold disabled:opacity-50"
-                        >
-                          {copiedRequestSave ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-                          <span>{copiedRequestSave ? 'Tersimpan!' : 'Salin & Simpan'}</span>
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -1403,16 +1437,17 @@ export default function App() {
                     ) : (
                       <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-80 overflow-y-auto p-1">
                         {requestItems.map((item, idx) => {
-                          const nameCol = headers.find(h => h.toLowerCase().includes('nama')) || headers[1] || headers[0];
-                          const skuCol = headers.find(h => h.toLowerCase().includes('sku') || h.toLowerCase().includes('kode'));
+                          const nameCol = headers.find(h => h.toLowerCase().includes('nama') || h.toLowerCase().includes('desc')) || headers[2] || headers[1] || headers[0];
+                          const skuCol = headers.find(h => h.toLowerCase().includes('sku') || h.toLowerCase().includes('kode') || h.toLowerCase() === 'code');
                           const unitCol = headers.find(h => h.toLowerCase().includes('unit'));
+                          const stockCol = headers[14] || headers.find(h => h.toLowerCase() === 'qty' || h.toLowerCase().includes('stok') || h.toLowerCase().includes('stock'));
                           const fotoCol = headers.find(h => h.toLowerCase().includes('foto'));
                           const driveId = fotoCol && item[fotoCol] ? String(item[fotoCol]).trim() : '';
                           
                           return (
                             <li key={item.id} className="group flex flex-col justify-between bg-white border border-slate-200/60 p-3.5 rounded-xl hover:shadow-md hover:border-purple-300 transition-all duration-200 gap-2">
-                              <div className="flex justify-between items-start">
-                                <div className="flex items-start space-x-3 overflow-hidden">
+                              <div className="flex justify-between items-start gap-2">
+                                <div className="flex items-start space-x-3 flex-1 min-w-0">
                                   {driveId ? (
                                     <div className="flex-shrink-0 h-9 w-9 mt-0.5 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 relative">
                                       <img
@@ -1434,14 +1469,17 @@ export default function App() {
                                       {idx + 1}
                                     </div>
                                   )}
-                                  <div className="truncate">
-                                    <p className="text-sm font-bold text-slate-700 truncate">{item[nameCol]}</p>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold text-slate-800 leading-snug break-words">{item[nameCol]}</p>
                                     <div className="flex flex-wrap gap-1 mt-1">
                                       {skuCol && item[skuCol] && (
                                         <span className="text-[9px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/30">SKU: {item[skuCol]}</span>
                                       )}
                                       {unitCol && item[unitCol] && (
                                         <span className="text-[9px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/30">Unit: {item[unitCol]}</span>
+                                      )}
+                                      {stockCol && item[stockCol] !== undefined && item[stockCol] !== '' && (
+                                        <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">Stok: {item[stockCol]}</span>
                                       )}
                                     </div>
                                   </div>
@@ -1475,9 +1513,224 @@ export default function App() {
                     )}
                   </div>
                 </div>
-              )}
+              </div>
 
-              {/* --- TABEL MASTER DATABASE PRODUK --- */}
+              {/* KOLOM KANAN (5 Cols): RIWAYAT REQUEST OUTLET (TERSIMPAN & TERSALIN) - HIDEABLE */}
+              {showHistorySidebar && (
+                <div className="lg:col-span-5 flex flex-col space-y-4">
+                  <div className="bg-white rounded-2xl shadow-sm border border-purple-200/80 overflow-hidden ring-1 ring-purple-900/5">
+                    {/* Header Panel Riwayat */}
+                    <div className="bg-gradient-to-r from-purple-50/80 via-purple-50/40 to-white px-4 py-3.5 border-b border-purple-100 flex items-center justify-between gap-2">
+                      <div className="flex items-center space-x-2.5">
+                        <div className="bg-purple-100 p-2 rounded-lg text-purple-600">
+                          <History className="h-4.5 w-4.5" />
+                        </div>
+                        <div>
+                          <h2 className="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-1.5">
+                            <span>Riwayat Request</span>
+                            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                              {filteredHistory.length}
+                            </span>
+                          </h2>
+                          <p className="text-[11px] font-medium text-slate-500">List tersalin & tersimpan</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5">
+                        <button
+                          onClick={fetchData}
+                          disabled={loading}
+                          className="p-1.5 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer"
+                          title="Sinkron / Refresh Riwayat"
+                        >
+                          <RefreshCw className={"h-4 w-4 " + (loading ? 'animate-spin text-purple-600' : '')} />
+                        </button>
+                        <button
+                          onClick={() => setShowHistorySidebar(false)}
+                          className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                          title="Sembunyikan Panel Riwayat"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                  {/* Filter & Search Bar Ringkas */}
+                  <div className="p-2.5 bg-slate-50/70 border-b border-slate-100 flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                        <Search className="h-3.5 w-3.5 text-slate-400" />
+                      </div>
+                      <input
+                        type="text"
+                        value={historySearchTerm}
+                        onChange={(e) => setHistorySearchTerm(e.target.value)}
+                        placeholder="Cari SKU / nama di riwayat..."
+                        className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      />
+                    </div>
+                    <div className="relative w-full sm:w-36">
+                      <select
+                        value={historyFilterMonth}
+                        onChange={(e) => setHistoryFilterMonth(e.target.value)}
+                        className="w-full appearance-none bg-white border border-slate-200 text-slate-700 text-xs font-semibold py-1.5 pl-2.5 pr-7 rounded-lg outline-none cursor-pointer"
+                      >
+                        <option value="all">Semua Bulan</option>
+                        {availableMonths.map(m => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="h-3.5 w-3.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Feed List Sesi Tersimpan */}
+                  <div className="p-3 bg-slate-50/40 max-h-[440px] overflow-y-auto space-y-3">
+                    {filteredHistory.length === 0 ? (
+                      <div className="py-10 px-4 text-center flex flex-col items-center justify-center">
+                        <div className="bg-white p-3.5 rounded-full shadow-xs mb-3 border border-purple-100">
+                          <History className="h-6 w-6 text-purple-300" />
+                        </div>
+                        <p className="text-xs font-bold text-slate-700">Belum Ada Riwayat Tersimpan</p>
+                        <p className="text-[11px] text-slate-400 max-w-xs mt-1">
+                          Setiap kali Anda menekan tombol <strong className="text-purple-600">Salin & Simpan</strong>, daftar request akan otomatis tercatat dan muncul di sini.
+                        </p>
+                      </div>
+                    ) : (
+                      filteredHistory.map((session) => {
+                        const isCopied = copiedHistoryId === session.id;
+                        const d = parseDateSafe(session.date);
+                        const timeStr = isNaN(d.getTime()) 
+                          ? session.date 
+                          : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ', ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+                        
+                        let routeOrigin = 'Gudang';
+                        let routeTarget = 'SDK';
+                        let adminName = session.requester || 'Admin';
+
+                        if (session.requester) {
+                          if (session.requester.includes(' ⬅ Outlet: ')) {
+                            const p = session.requester.split(' ⬅ Outlet: ');
+                            adminName = p[0];
+                            routeTarget = p[1] || 'SDK';
+                          } else if (session.requester.includes(' ➔ Tujuan: ')) {
+                            const p = session.requester.split(' ➔ Tujuan: ');
+                            adminName = p[0];
+                            routeTarget = p[1] || 'SDK';
+                          }
+                        }
+
+                        return (
+                          <div
+                            key={session.id}
+                            className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs hover:border-purple-300 hover:shadow-xs transition-all space-y-2.5"
+                          >
+                            {/* Header Card */}
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                              <div className="flex items-center space-x-1.5 text-slate-600">
+                                <Clock className="h-3.5 w-3.5 text-purple-500" />
+                                <span className="text-[11px] font-bold text-slate-700">{timeStr}</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200/50">
+                                  {routeOrigin} <span className="text-purple-400">➔</span> {routeTarget}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Admin & Total Info */}
+                            <div className="flex items-center justify-between text-[11px] text-slate-500">
+                              <span>Oleh: <strong className="text-slate-700 font-semibold">{adminName}</strong></span>
+                              <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded text-[10px]">
+                                {session.items?.length || 0} Produk
+                              </span>
+                            </div>
+
+                            {/* Item preview */}
+                            <div className="bg-slate-50/70 rounded-lg p-2 space-y-1.5 border border-slate-100">
+                              {session.items && session.items.slice(0, 3).map((item: any, itIdx: number) => {
+                                const nameCol = headers.find(h => h.toLowerCase().includes('nama') || h.toLowerCase().includes('desc')) || headers[2] || headers[1] || headers[0];
+                                const unitCol = headers.find(h => h.toLowerCase().includes('unit'));
+                                return (
+                                  <div key={itIdx} className="flex items-center justify-between text-[11px] gap-2">
+                                    <div className="text-slate-700 font-medium break-words leading-snug flex-1 min-w-0">
+                                      • {item[nameCol] || 'Produk'}
+                                      {item._catatan && <span className="text-slate-400 italic text-[10px] ml-1">({item._catatan})</span>}
+                                    </div>
+                                    <span className="flex-shrink-0 font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px] border border-emerald-200/60">
+                                      {item._qty || 1} {unitCol && item[unitCol] ? item[unitCol] : 'PCS'}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                              {session.items && session.items.length > 3 && (
+                                <p className="text-[10px] text-slate-400 italic pt-0.5 text-center">
+                                  + {session.items.length - 3} produk lainnya...
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Actions footer */}
+                            <div className="flex items-center justify-between pt-1 gap-2">
+                              <button
+                                onClick={() => handleCopyHistorySessionMessage(session)}
+                                className={"flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-2xs " + 
+                                  (isCopied 
+                                    ? 'bg-emerald-600 text-white' 
+                                    : 'bg-purple-600 text-white hover:bg-purple-700 active:scale-95'
+                                  )}
+                                title="Salin ulang format teks request untuk WA"
+                              >
+                                {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                                <span>{isCopied ? 'Tersalin!' : 'Salin Teks WA'}</span>
+                              </button>
+
+                              <div className="flex items-center space-x-1.5">
+                                <button
+                                  onClick={() => {
+                                    const dObj = parseDateSafe(session.date);
+                                    const dateIso = !isNaN(dObj.getTime()) ? dObj.toISOString().slice(0, 10) : 'Date_Unknown';
+                                    downloadCSV(session.items, displayHeaders, `Request_${routeTarget}_${dateIso}`);
+                                  }}
+                                  className="p-1.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-purple-600 rounded-lg text-xs font-bold transition-colors shadow-2xs"
+                                  title="Download CSV"
+                                >
+                                  <FileDown className="h-3.5 w-3.5" />
+                                </button>
+
+                                <button
+                                  onClick={() => setSelectedNotifSession(session)}
+                                  className="p-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg text-xs font-bold transition-colors shadow-2xs"
+                                  title="Buka Catatan / Diskusi"
+                                >
+                                  <MessageSquare className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Footer Riwayat Link */}
+                  <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <span className="text-[11px] text-slate-500">Tersinkron dengan spreadsheet</span>
+                    <button
+                      onClick={() => setActiveTab('history')}
+                      className="text-purple-700 hover:text-purple-900 font-bold text-[11px] flex items-center space-x-1 hover:underline"
+                    >
+                      <span>Lihat Layar Penuh</span>
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            </div>
+
+            {/* --- TABEL MASTER DATABASE PRODUK --- */}
               <div>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
                   <div>
@@ -1530,9 +1783,14 @@ export default function App() {
                             <tr>
                               <th className="px-4 sm:px-6 py-4 text-left text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider w-24">Aksi</th>
                               <th className="px-4 sm:px-6 py-4 text-left text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider w-16">No</th>
-                              {displayHeaders.map((header, idx) => (
-                                <th key={idx} className="px-4 sm:px-6 py-4 text-left text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{header}</th>
-                              ))}
+                              {displayHeaders.map((header, idx) => {
+                                const isStock = header === headers[14] || header.toLowerCase() === 'qty' || header.toLowerCase().includes('stok') || header.toLowerCase().includes('stock');
+                                return (
+                                  <th key={idx} className="px-4 sm:px-6 py-4 text-left text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                                    {header} {isStock && <span className="text-emerald-600 font-extrabold normal-case text-[11px] ml-1 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">(Stok Kolom 15)</span>}
+                                  </th>
+                                );
+                              })}
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-slate-100">
@@ -1545,30 +1803,44 @@ export default function App() {
                               return (
                                 <tr key={row.id} className={"transition-colors " + (isAdded ? `bg-${tabColor}-50/40` : 'hover:bg-slate-50/50')}>
                                   <td className="px-4 sm:px-6 py-3 whitespace-nowrap">
-                                    <button
-                                      onClick={() => handleAdd(row)}
-                                      disabled={isAdded}
-                                      className={"flex items-center justify-center space-x-1 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all " + 
-                                        (isAdded 
-                                          ? 'bg-slate-100 text-slate-400 border border-slate-200' 
-                                          : (activeTab === 'request' 
-                                              ? 'bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white border border-purple-100 shadow-sm active:scale-95' 
-                                              : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border border-indigo-100 shadow-sm active:scale-95'
-                                            )
-                                        )}
-                                    >
-                                      {isAdded ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                                      <span className="hidden sm:inline">{isAdded ? 'Masuk' : 'Tambah'}</span>
-                                    </button>
+                                    <div className="flex items-center space-x-1.5">
+                                      <button
+                                        onClick={() => handleAdd(row)}
+                                        disabled={isAdded}
+                                        className={"flex items-center justify-center space-x-1 px-2.5 py-1.5 rounded-lg text-[10px] sm:text-xs font-bold transition-all " + 
+                                          (isAdded 
+                                            ? 'bg-slate-100 text-slate-400 border border-slate-200' 
+                                            : (activeTab === 'request' 
+                                                ? 'bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white border border-purple-100 shadow-sm active:scale-95' 
+                                                : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white border border-indigo-100 shadow-sm active:scale-95'
+                                              )
+                                          )}
+                                      >
+                                        {isAdded ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                                        <span className="hidden sm:inline">{isAdded ? 'Masuk' : 'Tambah'}</span>
+                                      </button>
+                                    </div>
                                   </td>
                                   <td className="px-4 sm:px-6 py-3 whitespace-nowrap text-xs sm:text-sm font-semibold text-slate-400">
                                     {startIndex + rowIndex + 1}
                                   </td>
-                                  {displayHeaders.map((header, colIndex) => (
-                                    <td key={colIndex} className={"px-4 sm:px-6 py-3 text-xs sm:text-sm " + (colIndex === 1 ? 'font-bold text-slate-800' : 'text-slate-600 font-medium')}>
-                                      {row[header]}
-                                    </td>
-                                  ))}
+                                  {displayHeaders.map((header, colIndex) => {
+                                    const isStock = header === headers[14] || header.toLowerCase() === 'qty' || header.toLowerCase().includes('stok') || header.toLowerCase().includes('stock');
+                                    const isDesc = header.toLowerCase().includes('desc') || header.toLowerCase().includes('nama');
+                                    const isCode = header.toLowerCase() === 'code' || header.toLowerCase().includes('sku');
+                                    
+                                    return (
+                                      <td key={colIndex} className={"px-4 sm:px-6 py-3 text-xs sm:text-sm " + (isDesc ? 'font-bold text-slate-800' : isCode ? 'font-mono text-slate-700' : 'text-slate-600 font-medium')}>
+                                        {isStock ? (
+                                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-2xs">
+                                            {row[header] !== undefined && row[header] !== '' ? row[header] : '0'}
+                                          </span>
+                                        ) : (
+                                          row[header]
+                                        )}
+                                      </td>
+                                    );
+                                  })}
                                 </tr>
                               );
                             })}
@@ -1631,14 +1903,14 @@ export default function App() {
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden ring-1 ring-slate-900/5">
                 <div className="bg-slate-50 px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                   <div className="flex items-center space-x-3 text-slate-800">
-                    <div className="bg-white p-2 border border-slate-200 rounded-lg text-slate-500 shadow-sm">
+                    <div className="bg-white p-2 border border-purple-200 rounded-lg text-purple-600 shadow-sm">
                       <History className="h-5 w-5" />
                     </div>
                     <div>
-                      <h2 className="text-base sm:text-lg font-bold">
-                        {userRole === 'purchasing' ? 'Monitor Laporan Toko (Purchasing)' : 'Riwayat Rekap Sesi'}
+                      <h2 className="text-base sm:text-lg font-bold text-slate-800">
+                        Riwayat Request Outlet
                       </h2>
-                      <p className="text-xs font-semibold text-slate-500">{filteredHistory.length} Rekaman laporan ditemukan</p>
+                      <p className="text-xs font-semibold text-slate-500">{filteredHistory.length} Rekaman request outlet ditemukan</p>
                     </div>
                   </div>
                   
@@ -1692,24 +1964,6 @@ export default function App() {
                     )}
                   </div>
                 </div>
-
-                {/* Sub category filter tabs */}
-                <div className="bg-slate-50/50 border-b border-slate-200 px-4 sm:px-6 py-3 flex space-x-2">
-                  <button
-                    onClick={() => setHistoryFilterType('rekap')}
-                    className={"px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center space-x-1.5 " + (historyFilterType === 'rekap' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50')}
-                  >
-                    <ListChecks className="h-4 w-4" />
-                    <span>Laporan Produk Kosong</span>
-                  </button>
-                  <button
-                    onClick={() => setHistoryFilterType('request')}
-                    className={"px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center space-x-1.5 " + (historyFilterType === 'request' ? 'bg-purple-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50')}
-                  >
-                    <Store className="h-4 w-4" />
-                    <span>Request Outlet</span>
-                  </button>
-                </div>
                 
                 <div className="p-4 sm:p-6 bg-slate-50/30 space-y-6">
                   {groupedHistoryEntries.length > 0 ? (
@@ -1720,7 +1974,7 @@ export default function App() {
                           {/* Header Date Frame */}
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-2">
                             <h3 className="text-sm sm:text-base font-bold text-slate-700 flex items-center space-x-2">
-                              <span className={"w-2 h-5 rounded-full " + (historyFilterType === 'request' ? 'bg-purple-400' : 'bg-indigo-400')}></span>
+                              <span className="w-2 h-5 rounded-full bg-purple-500"></span>
                               <span>{dateKey}</span>
                             </h3>
                             
@@ -1920,6 +2174,57 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+
+      {/* FLOATING ACTION CHAT TRIGGER */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setIsLiveChatOpen(true)}
+          className="flex items-center space-x-2.5 px-4 py-3 bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-full shadow-2xl hover:shadow-indigo-500/30 border border-white/20 transition-all group"
+        >
+          <div className="relative">
+            <MessageSquare className="h-5 w-5" />
+            {liveChatUnreadCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-amber-400 text-amber-950 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full border border-white animate-bounce">
+                {liveChatUnreadCount}
+              </span>
+            )}
+          </div>
+          <span className="text-xs font-bold tracking-wide pr-1">Chat &amp; Info Stok</span>
+        </motion.button>
+      </div>
+
+      {/* LIVE CHAT DRAWER & EMPTY PRODUCT ALERTS */}
+      <AnimatePresence>
+        {isLiveChatOpen && (
+          <LiveChatDrawer
+            isOpen={isLiveChatOpen}
+            onClose={() => setIsLiveChatOpen(false)}
+            currentUser={loggedInUser}
+            onSwitchUser={handleSwitchUser}
+            products={data}
+            headers={headers}
+            onAddToRekap={handleAddToRekapFromChat}
+            onAddToRequest={handleAddToRequestFromChat}
+            onSearchInDatabase={handleSearchInDatabase}
+            preSelectedProductForAlert={preSelectedProductForAlert}
+            onClearPreSelectedProduct={() => setPreSelectedProductForAlert(null)}
+            onOpenRecordingCenter={() => setIsRecordingCenterOpen(true)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* REAL-TIME CHAT RECORDING & AUDIT CENTER MODAL */}
+      <AnimatePresence>
+        {isRecordingCenterOpen && (
+          <ChatRecordingCenter
+            isOpen={isRecordingCenterOpen}
+            onClose={() => setIsRecordingCenterOpen(false)}
+            currentUser={loggedInUser}
+          />
+        )}
+      </AnimatePresence>
 
       {/* SETUP CONFIG MODAL */}
       <AnimatePresence>
