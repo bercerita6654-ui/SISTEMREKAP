@@ -9,6 +9,7 @@ export interface Product {
   'Nama Produk': string;
   Unit: string;
   'Merk'?: string;
+  'Stok'?: string;
   'Foto Produk'?: string;
   'Stock Gudang'?: string;
   'Stock Toko'?: string;

@@ -325,15 +325,18 @@ export default function App() {
 
       const parsedArray = parseCSV(csvText);
       if (parsedArray.length > 1) {
-        const fixedHeaders = ['SKU', 'Nama Produk', 'Unit', 'Merk', 'Foto Produk'];
+        const fixedHeaders = ['SKU', 'Nama Produk', 'Unit', 'Stok', 'Foto Produk'];
         const extractedData: Product[] = parsedArray.slice(1).map((row, index) => {
+          const stokVal = row[14] !== undefined ? String(row[14]).trim() : '';
           return {
             id: index,
             'SKU': row[0] ? String(row[0]).trim() : '',
             'Nama Produk': row[2] ? String(row[2]).trim() : '',
             'Unit': row[3] ? String(row[3]).trim() : '',
             'Merk': row[6] ? String(row[6]).trim() : '',
-            'Foto Produk': row[21] ? String(row[21]).trim() : ''
+            'Stok': stokVal || '0',
+            'Qty': stokVal || '0',
+            'Foto Produk': row[21] ? String(row[21]).trim() : (row[23] ? String(row[23]).trim() : '')
           };
         }).filter(row => row['Nama Produk'] !== '' || row['SKU'] !== '');
 
@@ -827,21 +830,16 @@ export default function App() {
 
   const displayHeaders = useMemo(() => {
     if (headers.length === 0) return [];
-    
-    // Identify 15th column (stock column from spreadsheet, 0-indexed 14)
-    const stockCol = headers[14] || headers.find(h => h.toLowerCase().trim() === 'qty' || h.toLowerCase().includes('stok') || h.toLowerCase().includes('stock'));
 
     const preferredOrder = [
-      headers.find(h => h.toLowerCase() === 'code' || h.toLowerCase().includes('sku') || h.toLowerCase().includes('kode')),
-      headers.find(h => h.toLowerCase() === 'barcode'),
+      headers.find(h => h.toLowerCase() === 'sku' || h.toLowerCase() === 'code' || h.toLowerCase().includes('kode')),
       headers.find(h => h.toLowerCase().includes('desc') || h.toLowerCase().includes('nama')),
       headers.find(h => h.toLowerCase().includes('unit') || h.toLowerCase().includes('satuan')),
-      headers.find(h => h.toLowerCase() === 'merk'),
-      stockCol
+      headers.find(h => h.toLowerCase() === 'stok' || h.toLowerCase() === 'qty' || h.toLowerCase().includes('stok') || h.toLowerCase().includes('stock')),
     ].filter((h): h is string => Boolean(h));
 
     const result = Array.from(new Set(preferredOrder));
-    return result.length > 0 ? result : headers;
+    return result.length > 0 ? result : headers.filter(h => !h.toLowerCase().includes('foto'));
   }, [headers]);
 
   const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
@@ -995,6 +993,7 @@ export default function App() {
 
     const stockGudangCol = headers.find(h => h.toLowerCase().includes('gudang'));
     const stockTokoCol = headers.find(h => h.toLowerCase().includes('toko'));
+    const generalStockCol = headers.find(h => h.toLowerCase() === 'stok' || h.toLowerCase() === 'qty' || h.toLowerCase().includes('stock'));
 
     let totalStock = 0;
     let stockFound = false;
@@ -1006,6 +1005,11 @@ export default function App() {
     }
     if (stockTokoCol && currentItem[stockTokoCol]) {
       const valStr = String(currentItem[stockTokoCol]).replace(/[^0-9.-]+/g,"");
+      const val = parseFloat(valStr);
+      if (!isNaN(val)) { totalStock += val; stockFound = true; }
+    }
+    if (!stockFound && generalStockCol && currentItem[generalStockCol] !== undefined && currentItem[generalStockCol] !== '') {
+      const valStr = String(currentItem[generalStockCol]).replace(/[^0-9.-]+/g,"");
       const val = parseFloat(valStr);
       if (!isNaN(val)) { totalStock += val; stockFound = true; }
     }
@@ -1784,10 +1788,10 @@ export default function App() {
                               <th className="px-4 sm:px-6 py-4 text-left text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider w-24">Aksi</th>
                               <th className="px-4 sm:px-6 py-4 text-left text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider w-16">No</th>
                               {displayHeaders.map((header, idx) => {
-                                const isStock = header === headers[14] || header.toLowerCase() === 'qty' || header.toLowerCase().includes('stok') || header.toLowerCase().includes('stock');
+                                const isStock = header.toLowerCase() === 'stok' || header.toLowerCase() === 'qty' || header.toLowerCase().includes('stok') || header.toLowerCase().includes('stock');
                                 return (
                                   <th key={idx} className="px-4 sm:px-6 py-4 text-left text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                                    {header} {isStock && <span className="text-emerald-600 font-extrabold normal-case text-[11px] ml-1 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">(Stok Kolom 15)</span>}
+                                    {header} {isStock && <span className="text-emerald-600 font-extrabold normal-case text-[11px] ml-1 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">(Kolom 15)</span>}
                                   </th>
                                 );
                               })}
@@ -1825,7 +1829,7 @@ export default function App() {
                                     {startIndex + rowIndex + 1}
                                   </td>
                                   {displayHeaders.map((header, colIndex) => {
-                                    const isStock = header === headers[14] || header.toLowerCase() === 'qty' || header.toLowerCase().includes('stok') || header.toLowerCase().includes('stock');
+                                    const isStock = header.toLowerCase() === 'stok' || header.toLowerCase() === 'qty' || header.toLowerCase().includes('stok') || header.toLowerCase().includes('stock');
                                     const isDesc = header.toLowerCase().includes('desc') || header.toLowerCase().includes('nama');
                                     const isCode = header.toLowerCase() === 'code' || header.toLowerCase().includes('sku');
                                     
