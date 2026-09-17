@@ -574,36 +574,62 @@ export default function App() {
     setRequestItems(requestItems.map(r => r.id === id ? { ...r, _qty: qtyValue } : r));
   };
 
-  const executeCopy = (text: string, setCopiedState: (v: boolean) => void, typeLabel: 'copy' | 'request', items: any[], saveToHistory = true) => {
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    try {
-      document.execCommand('copy');
-      setCopiedState(true);
-      setTimeout(() => setCopiedState(false), 2000);
-
-      if (saveToHistory) {
-        const newSessionId = 'ID-' + new Date().toISOString(); 
-        const newSession: HistorySession = {
-          id: newSessionId,
-          date: newSessionId,
-          type: typeLabel === 'request' ? 'request' : 'save',
-          items: items,
-          text: text,
-          chatHistory: [],
-          requester: typeLabel === 'request' ? `${getFinalRequesterName()} ⬅ Outlet: ${destinationOutlet}` : (loggedInUser?.name || 'Admin')
-        };
-        const newHistory = [newSession, ...savedHistory];
-        setSavedHistory(newHistory);
-        localStorage.setItem('rekapSavedHistory', JSON.stringify(newHistory));
+  const copyTextToClipboard = async (text: string): Promise<boolean> => {
+    if (!text) return false;
+    let copied = false;
+    
+    // 1. Try modern navigator.clipboard
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch (e) {
+        console.warn('navigator.clipboard failed, fallback to execCommand', e);
       }
-    } catch (err) {
-      console.error('Gagal menyalin', err);
     }
-    document.body.removeChild(textArea);
+
+    // 2. Fallback to execCommand with offscreen textarea
+    if (!copied) {
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.top = "0";
+        textArea.style.left = "-9999px";
+        textArea.style.opacity = "0";
+        textArea.setAttribute("readonly", "");
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(textArea);
+      } catch (err) {
+        console.error('execCommand copy failed:', err);
+      }
+    }
+    return copied;
+  };
+
+  const executeCopy = async (text: string, setCopiedState: (v: boolean) => void, typeLabel: 'copy' | 'request', items: any[], saveToHistory = true) => {
+    await copyTextToClipboard(text);
+    setCopiedState(true);
+    setTimeout(() => setCopiedState(false), 2000);
+
+    if (saveToHistory) {
+      const newSessionId = 'ID-' + new Date().toISOString(); 
+      const newSession: HistorySession = {
+        id: newSessionId,
+        date: newSessionId,
+        type: typeLabel === 'request' ? 'request' : 'save',
+        items: items,
+        text: text,
+        chatHistory: [],
+        requester: typeLabel === 'request' ? `${getFinalRequesterName()} ⬅ Outlet: ${destinationOutlet}` : (loggedInUser?.name || 'Admin')
+      };
+      const newHistory = [newSession, ...savedHistory];
+      setSavedHistory(newHistory);
+      localStorage.setItem('rekapSavedHistory', JSON.stringify(newHistory));
+    }
   };
 
   const handleCopy = () => {
@@ -616,33 +642,13 @@ export default function App() {
     if (requestItems.length === 0) return;
     const text = generateRequestCopyText(requestItems, destinationOutlet, getFinalRequesterName(), ['SKU', 'Nama Produk', 'Unit']);
     
-    if (saveToHistory) {
-      if (!scriptUrl) {
-        setShowSetupModal(true);
-        return;
-      }
+    // 1. Immediately copy to clipboard so browser user gesture is preserved
+    await copyTextToClipboard(text);
 
+    if (saveToHistory) {
       setCopiedRequestSave(true);
       const newSessionId = 'ID-' + new Date().toISOString(); 
       const finalReqName = `${getFinalRequesterName()} ⬅ Outlet: ${destinationOutlet}`;
-      
-      try {
-        const payload = JSON.stringify({ 
-          action: 'save_rekap', 
-          sessionId: newSessionId, 
-          tipe: 'request',
-          requester: finalReqName,
-          items: requestItems
-        });
-        await fetch(scriptUrl, { 
-          method: 'POST', 
-          mode: 'no-cors', 
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
-          body: payload 
-        });
-      } catch (e) { 
-        console.error(e); 
-      }
       
       const newSession: HistorySession = {
         id: newSessionId,
@@ -656,15 +662,27 @@ export default function App() {
       const newHistory = [newSession, ...savedHistory];
       setSavedHistory(newHistory);
       localStorage.setItem('rekapSavedHistory', JSON.stringify(newHistory));
-      
-      // Traditional clipboards
-      const textArea = document.createElement("textarea");
-      textArea.value = text;
-      document.body.appendChild(textArea);
-      textArea.focus(); 
-      textArea.select();
-      try { document.execCommand('copy'); } catch {}
-      document.body.removeChild(textArea);
+
+      // Asynchronous background sync to Google Apps Script if URL is configured
+      if (scriptUrl) {
+        try {
+          const payload = JSON.stringify({ 
+            action: 'save_rekap', 
+            sessionId: newSessionId, 
+            tipe: 'request',
+            requester: finalReqName,
+            items: requestItems
+          });
+          fetch(scriptUrl, { 
+            method: 'POST', 
+            mode: 'no-cors', 
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }, 
+            body: payload 
+          }).catch(e => console.error('Background sync failed', e));
+        } catch (e) { 
+          console.error(e); 
+        }
+      }
 
       setTimeout(() => { 
         setCopiedRequestSave(false); 
@@ -672,11 +690,12 @@ export default function App() {
         fetchData(); 
       }, 2000);
     } else {
-      executeCopy(text, setCopiedRequestOnly, 'request', requestItems, false);
+      setCopiedRequestOnly(true);
+      setTimeout(() => setCopiedRequestOnly(false), 2000);
     }
   };
 
-  const handleCopyHistorySessionMessage = (session: HistorySession) => {
+  const handleCopyHistorySessionMessage = async (session: HistorySession) => {
     let textToCopy = session.text;
     if (!textToCopy) {
       let dest = 'Outlet';
@@ -695,14 +714,7 @@ export default function App() {
       textToCopy = generateRequestCopyText(session.items, dest, req, ['SKU', 'Nama Produk', 'Unit']);
     }
 
-    const textArea = document.createElement("textarea");
-    textArea.value = textToCopy;
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    try { document.execCommand('copy'); } catch {}
-    document.body.removeChild(textArea);
-
+    await copyTextToClipboard(textToCopy);
     setCopiedHistoryId(session.id);
     setTimeout(() => {
       setCopiedHistoryId(null);
