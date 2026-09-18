@@ -1763,6 +1763,14 @@ export default function App() {
                     </div>
                     <input
                       type="text"
+                      style={{
+                        width: '693.988px',
+                        paddingTop: '20px',
+                        marginLeft: '-254px',
+                        paddingLeft: '291px',
+                        paddingBottom: '20px',
+                        paddingRight: '17px',
+                      }}
                       className={"block w-full pl-11 pr-4 py-2.5 border border-slate-200 rounded-full bg-white placeholder-slate-400 focus:outline-none focus:ring-2 text-sm transition-all shadow-sm " + (activeTab === 'request' ? 'focus:ring-purple-500/20 focus:border-purple-500' : 'focus:ring-indigo-500/20 focus:border-indigo-500')}
                       placeholder="Cari SKU, Nama Produk, atau Unit..."
                       value={searchTerm}
